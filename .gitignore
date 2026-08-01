@@ -1,6 +1,7 @@
 __pycache__/
-*.pyc 
+*.pyc
 .pytest_cache/
 .venv/
 .vscode/
-.DS_Store*.pdf
+.DS_Store
+*.pdf
