@@ -1,10 +1,19 @@
 from state import MachineState
 
+
+def to_signed(value):
+    if (value >> 31) & 1:
+        return value - 0x100000000
+    return value
+
+
+
+
 class Emulator:
     def __init__(self, state=None):
         self.state = state if state is not None else MachineState()
 
-    #def load_program(self, words, start=0):
+    
     def step(self):
         instr = self.state.load_word(self.state.pc)
         opcode = instr & 0x7F
@@ -24,10 +33,22 @@ class Emulator:
                     result = val1 - val2      # sub
                 else:
                     raise ValueError(f"unsupported funct7: {funct7:#x} at pc={self.state.pc:#x}")
-                self.state.write_reg(rd, result)
+            
+            elif funct3 == 0x7:
+                result = val1 & val2
+            elif funct3 == 0x6:
+                result = val1 | val2
+            elif funct3 == 0x4:
+                result = val1 ^ val2
+            elif funct3 == 0x2:
+                result = 1 if to_signed(val1) < to_signed(val2) else 0
             else:
+            
                 raise ValueError(f"unsupported funct3: {funct3:#x} at pc={self.state.pc:#x}")
-            self.state.pc += 4
+        
+            self.state.write_reg(rd, result) 
+        self.state.pc += 4
+
 
 if __name__ == "__main__":
     e = Emulator()
