@@ -35,18 +35,20 @@ class Emulator:
                 else:
                     raise ValueError(f"unsupported funct7: {funct7:#x} at pc={self.state.pc:#x}")
             
-            elif funct3 == 0x7:
+            elif funct3 == 0x7 and funct7 == 0x00:
                 result = val1 & val2
-            elif funct3 == 0x6:
+            elif funct3 == 0x6 and funct7 == 0x00:
                 result = val1 | val2
-            elif funct3 == 0x4:
+            elif funct3 == 0x4 and funct7 == 0x00:
                 result = val1 ^ val2
-            elif funct3 == 0x2:
+            elif funct3 == 0x2 and funct7 == 0x00:
                 result = 1 if to_signed(val1) < to_signed(val2) else 0
             
             else:
-          
-                raise ValueError(f"unsupported funct3: {funct3:#x} at pc={self.state.pc:#x}")
+                raise ValueError(
+                    f"unsupported R-type: funct3={funct3:#x} funct7={funct7:#x} "
+                    f"at pc={self.state.pc:#x}"
+                )
 
             self.state.write_reg(rd, result)
         elif opcode == 0x73:
