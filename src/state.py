@@ -5,6 +5,7 @@ class MachineState:
         self.pc = pc
         self.regs = [0] * 32
         self.mem = {}
+        self.halted = False
 
     def read_reg(self, i):
         return self.regs[i]
@@ -14,7 +15,7 @@ class MachineState:
             return
         self.regs[i] = value & 0xFFFFFFFF
 
-    def store_word(self, addr, value):
+    def store_word(self, addr, value):              #writes a 32-bit word to an address
         value = value & 0xFFFFFFFF
         for k in range(4):
             self.mem[addr + k] = (value >> (8 * k)) & 0xFF
@@ -36,5 +37,8 @@ class MachineState:
                 if self.mem[addr] != 0
             },
         }
+    
+
+
 
 

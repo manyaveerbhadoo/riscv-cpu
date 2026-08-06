@@ -16,6 +16,7 @@ class Emulator:
     
     def step(self):
         instr = self.state.load_word(self.state.pc)
+        next_pc = self.state.pc + 4
         opcode = instr & 0x7F
         if opcode == 0x33:
             rd = (instr >> 7) & 0x1F
@@ -42,19 +43,39 @@ class Emulator:
                 result = val1 ^ val2
             elif funct3 == 0x2:
                 result = 1 if to_signed(val1) < to_signed(val2) else 0
-            else:
             
+            else:
+          
                 raise ValueError(f"unsupported funct3: {funct3:#x} at pc={self.state.pc:#x}")
-        
-            self.state.write_reg(rd, result) 
-        self.state.pc += 4
 
+            self.state.write_reg(rd, result)
+        elif opcode == 0x73:
+            self.state.halted = True
+
+        else:
+            raise ValueError(f"unsupported opcode: {opcode:#x} at pc={self.state.pc:#x}")
+        
+        
+        self.state.pc = next_pc
+        
+        
+    def load_program(self, words, start=0):
+        for i, word in enumerate(words):
+            self.state.store_word(start + i * 4, word)
+        self.state.pc = start
+
+    def run(self, max_steps=1000):
+        for _ in range(max_steps):
+            if self.state.halted:
+                break
+            self.step()
 
 if __name__ == "__main__":
     e = Emulator()
     e.state.write_reg(1, 10)
     e.state.write_reg(2, 3)
-    e.state.store_word(0, 0x40208533)     
-    e.step()
-    print(e.state.read_reg(10))          
-    print(e.state.pc)                    
+    e.load_program([0x00208533, 0x00000073])
+    e.run()
+    print(e.state.read_reg(10))   # expect 13
+    print(e.state.pc)             # expect 8 
+               
