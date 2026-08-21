@@ -157,7 +157,7 @@ class Emulator:
 
         elif opcode == 0x67:
             funct3 = (instr >> 12) & 0x7
-            
+
             if funct3 != 0x0:
                 raise ValueError(f"unsupported JALR funct3: {funct3:#x} at pc={self.state.pc:#x}")
             
