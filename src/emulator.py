@@ -200,17 +200,17 @@ class Emulator:
 if __name__ == "__main__":
     e = Emulator()
 
-e.load_program([
-        0x00000093,    # addi x1, x0, 0
-        0x00100113,    # addi x2, x0, 1
-        0x00B00193,    # addi x3, x0, 11
-        0x00310863,    # beq  x2, x3, +16   (to ecall)
-        0x002080B3,    # add  x1, x1, x2
-        0x00110113,    # addi x2, x2, 1
-        0xFF1FF06F,    # jal  x0, -16       (back to beq)
-        0x00000073,    # ecall
-    ])
-e.run()
-print(e.state.read_reg(1))    # expect 55
+    e.load_program([
+            0x00000093,    # addi x1, x0, 0
+            0x00100113,    # addi x2, x0, 1
+            0x00B00193,    # addi x3, x0, 11
+            0x00310863,    # beq  x2, x3, +16   (to ecall)
+            0x002080B3,    # add  x1, x1, x2
+            0x00110113,    # addi x2, x2, 1
+            0xFF1FF06F,    # jal  x0, -16       (back to beq)
+            0x00000073,    # ecall
+        ])
+    e.run()
+    print(e.state.read_reg(1))    # expect 55
 
                
