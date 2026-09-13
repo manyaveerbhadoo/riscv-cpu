@@ -76,3 +76,37 @@ def parse(text, start=0):
         stmts.append(parse_stmt(line, addr, lineno))
         addr += 4
     return stmts, labels
+
+
+def match(entry):
+    word = entry.opcode
+    if entry.funct3 is not None:
+        word |= entry.funct3 << 12
+    if entry.funct7 is not None:
+        word |= entry.funct7 << 25
+    return word
+
+
+def encode_r(stmt, entry):
+    ops = stmt.operands
+    return match(entry) | ops["rd"] << 7 | ops["rs1"] << 15 | ops["rs2"] << 20
+
+
+def encode_i(stmt, entry):
+    ops = stmt.operands
+    imm = ops["imm"]
+    if isinstance(imm, str):
+        raise ValueError(f"label {imm!r} not supported as {stmt.name} imm on line {stmt.lineno}")
+    if not -2048 <= imm <= 2047:
+        raise ValueError(f"imm {imm} out of range [-2048, 2047] on line {stmt.lineno}")
+    return match(entry) | ops["rd"] << 7 | ops["rs1"] << 15 | (imm & 0xFFF) << 20
+
+
+ENCODERS = {"R": encode_r, "I": encode_i}
+
+
+def encode(stmt):
+    entry = BY_NAME[stmt.name]
+    if entry.fmt not in ENCODERS:
+        raise ValueError(f"no encoder for format {entry.fmt} ({stmt.name}) on line {stmt.lineno}")
+    return ENCODERS[entry.fmt](stmt, entry)
