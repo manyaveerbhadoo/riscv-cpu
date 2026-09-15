@@ -92,17 +92,66 @@ def encode_r(stmt, entry):
     return match(entry) | ops["rd"] << 7 | ops["rs1"] << 15 | ops["rs2"] << 20
 
 
-def encode_i(stmt, entry):
-    ops = stmt.operands
-    imm = ops["imm"]
+# (word_hi, word_lo, imm_lo) for each slice of the immediate
+IMM_BITS = {
+    "I": [(31, 20, 0)],
+    "S": [(31, 25, 5), (11, 7, 0)],
+    "B": [(31, 31, 12), (30, 25, 5), (11, 8, 1), (7, 7, 11)],
+    "U": [(31, 12, 12)],
+    "J": [(31, 31, 20), (30, 21, 1), (20, 20, 11), (19, 12, 12)],
+}
+
+
+def place_imm(imm, fmt):
+    word = 0
+    for hi, lo, imm_lo in IMM_BITS[fmt]:
+        mask = (1 << (hi - lo + 1)) - 1
+        word |= ((imm >> imm_lo) & mask) << lo
+    return word
+
+
+def check_imm(stmt, min_val, max_val, must_be_even=False):
+    imm = stmt.operands["imm"]
     if isinstance(imm, str):
         raise ValueError(f"label {imm!r} not supported as {stmt.name} imm on line {stmt.lineno}")
-    if not -2048 <= imm <= 2047:
-        raise ValueError(f"imm {imm} out of range [-2048, 2047] on line {stmt.lineno}")
-    return match(entry) | ops["rd"] << 7 | ops["rs1"] << 15 | (imm & 0xFFF) << 20
+    if not min_val <= imm <= max_val:
+        raise ValueError(f"imm {imm} out of range [{min_val}, {max_val}] on line {stmt.lineno}")
+    if must_be_even and imm % 2:
+        raise ValueError(f"imm {imm} must be even for {stmt.name} on line {stmt.lineno}")
 
 
-ENCODERS = {"R": encode_r, "I": encode_i}
+def encode_i(stmt, entry):
+    ops = stmt.operands
+    check_imm(stmt, -2048, 2047)
+    return match(entry) | ops["rd"] << 7 | ops["rs1"] << 15 | place_imm(ops["imm"], entry.fmt)
+
+
+def encode_s(stmt, entry):
+    ops = stmt.operands
+    check_imm(stmt, -2048, 2047)
+    return match(entry) | ops["rs1"] << 15 | ops["rs2"] << 20 | place_imm(ops["imm"], entry.fmt)
+
+
+def encode_b(stmt, entry):
+    ops = stmt.operands
+    check_imm(stmt, -4096, 4094, must_be_even=True)
+    return match(entry) | ops["rs1"] << 15 | ops["rs2"] << 20 | place_imm(ops["imm"], entry.fmt)
+
+
+# lui is written with the 20-bit operand, IMM_BITS places the value it loads
+def encode_u(stmt, entry):
+    ops = stmt.operands
+    check_imm(stmt, 0, 0xFFFFF)
+    return match(entry) | ops["rd"] << 7 | place_imm(ops["imm"] << 12, entry.fmt)
+
+
+def encode_j(stmt, entry):
+    ops = stmt.operands
+    check_imm(stmt, -1048576, 1048574, must_be_even=True)
+    return match(entry) | ops["rd"] << 7 | place_imm(ops["imm"], entry.fmt)
+
+
+ENCODERS = {"R": encode_r, "I": encode_i, "S": encode_s, "B": encode_b, "U": encode_u, "J": encode_j}
 
 
 def encode(stmt):
