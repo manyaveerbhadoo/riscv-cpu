@@ -1,6 +1,6 @@
 from collections import namedtuple
 
-from isa import BY_NAME
+from isa import BY_NAME, FORMATS
 
 ABI = ("zero ra sp gp tp t0 t1 t2 s0 s1 a0 a1 a2 a3 a4 a5 a6 a7 "
        "s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 t3 t4 t5 t6").split()
@@ -109,4 +109,7 @@ def encode(stmt):
     entry = BY_NAME[stmt.name]
     if entry.fmt not in ENCODERS:
         raise ValueError(f"no encoder for format {entry.fmt} ({stmt.name}) on line {stmt.lineno}")
+    for slot in FORMATS[entry.fmt]:
+        if slot != "imm" and not 0 <= stmt.operands[slot] <= 31:
+            raise ValueError(f"{slot} {stmt.operands[slot]} out of range [0, 31] on line {stmt.lineno}")
     return ENCODERS[entry.fmt](stmt, entry)
