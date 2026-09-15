@@ -151,7 +151,14 @@ def encode_j(stmt, entry):
     return match(entry) | ops["rd"] << 7 | place_imm(ops["imm"], entry.fmt)
 
 
-ENCODERS = {"R": encode_r, "I": encode_i, "S": encode_s, "B": encode_b, "U": encode_u, "J": encode_j}
+def encode_sys(stmt, entry):
+    return match(entry)
+
+
+ENCODERS = {
+    "R": encode_r, "I": encode_i, "S": encode_s, "B": encode_b,
+    "U": encode_u, "J": encode_j, "SYS": encode_sys,
+}
 
 
 def encode(stmt):
@@ -162,3 +169,19 @@ def encode(stmt):
         if slot != "imm" and not 0 <= stmt.operands[slot] <= 31:
             raise ValueError(f"{slot} {stmt.operands[slot]} out of range [0, 31] on line {stmt.lineno}")
     return ENCODERS[entry.fmt](stmt, entry)
+
+
+def assemble(text, start=0):
+    stmts, labels = parse(text, start)
+    words = []
+    for stmt in stmts:
+        if BY_NAME[stmt.name].fmt in ("B", "J"):
+            # a number is a target address too, same as a label
+            target = stmt.operands["imm"]
+            if isinstance(target, str):
+                if target not in labels:
+                    raise ValueError(f"undefined label {target!r} on line {stmt.lineno}")
+                target = labels[target]
+            stmt = stmt._replace(operands=dict(stmt.operands, imm=target - stmt.addr))
+        words.append(encode(stmt))
+    return words
