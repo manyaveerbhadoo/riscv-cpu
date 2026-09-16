@@ -12,32 +12,51 @@ REGS["fp"] = 8
 Stmt = namedtuple("Stmt", "name operands addr lineno")
 
 
+class AsmError(ValueError):
+    def __init__(self, lineno, msg):
+        super().__init__(f"line {lineno}: {msg}")
+        self.lineno = lineno
+        self.msg = msg
+
+
 def parse_reg(tok, lineno):
+    if not tok:
+        raise AsmError(lineno, "missing register")
     if tok not in REGS:
-        raise ValueError(f"unknown register {tok!r} on line {lineno}")
+        raise AsmError(lineno, f"unknown register {tok!r}")
     return REGS[tok]
 
 
 def parse_imm(tok, lineno):
+    if not tok:
+        raise AsmError(lineno, "missing immediate")
     if tok.isidentifier():
         return tok
     try:
         return int(tok, 0)
     except ValueError:
-        raise ValueError(f"bad immediate {tok!r} on line {lineno}")
+        raise AsmError(lineno, f"bad immediate {tok!r}")
 
 
 def parse_stmt(line, addr, lineno):
     parts = line.split(None, 1)
     name = parts[0]
     if name not in BY_NAME:
-        raise ValueError(f"unknown mnemonic {name!r} on line {lineno}")
+        raise AsmError(lineno, f"unknown mnemonic {name!r}")
 
     entry = BY_NAME[name]
-    toks = [t.strip() for t in parts[1].split(",")] if len(parts) > 1 else []
+    arg_text = parts[1] if len(parts) > 1 else ""
+    toks = [t.strip() for t in arg_text.split(",")] if arg_text else []
+    want = ", ".join(entry.syntax)
+    if toks and not toks[-1]:
+        raise AsmError(lineno, f"trailing comma in {name} operands ({want})")
+    if not all(toks):
+        raise AsmError(lineno, f"missing operand in {name} ({want})")
     if len(toks) != len(entry.syntax):
-        raise ValueError(
-            f"{name} takes {len(entry.syntax)} operands, got {len(toks)} on line {lineno}"
+        raise AsmError(
+            lineno,
+            f"{name} takes {len(entry.syntax)} operands ({want}), "
+            f"got {len(toks)}: {arg_text.strip()!r}"
         )
 
     operands = {}
@@ -45,7 +64,7 @@ def parse_stmt(line, addr, lineno):
         if slot == "imm(rs1)":
             imm, sep, rs1 = tok.partition("(")
             if not sep or not rs1.endswith(")"):
-                raise ValueError(f"expected imm(rs1), got {tok!r} on line {lineno}")
+                raise AsmError(lineno, f"expected imm(rs1) for {name}, got {tok!r}")
             operands["imm"] = parse_imm(imm.strip(), lineno)
             operands["rs1"] = parse_reg(rs1[:-1].strip(), lineno)
         elif slot == "imm":
@@ -53,7 +72,7 @@ def parse_stmt(line, addr, lineno):
         elif slot in ("rd", "rs1", "rs2"):
             operands[slot] = parse_reg(tok, lineno)
         else:
-            raise ValueError(f"unknown operand slot {slot!r} for {name}")
+            raise AsmError(lineno, f"unknown operand slot {slot!r} for {name}")
     return Stmt(name, operands, addr, lineno)
 
 
@@ -67,9 +86,9 @@ def parse(text, start=0):
             label, line = line.split(":", 1)
             label, line = label.strip(), line.strip()
             if not label.isidentifier():
-                raise ValueError(f"bad label {label!r} on line {lineno}")
+                raise AsmError(lineno, f"bad label {label!r}")
             if label in labels:
-                raise ValueError(f"duplicate label {label!r} on line {lineno}")
+                raise AsmError(lineno, f"duplicate label {label!r}")
             labels[label] = addr
         if not line:
             continue
@@ -113,11 +132,11 @@ def place_imm(imm, fmt):
 def check_imm(stmt, min_val, max_val, must_be_even=False):
     imm = stmt.operands["imm"]
     if isinstance(imm, str):
-        raise ValueError(f"label {imm!r} not supported as {stmt.name} imm on line {stmt.lineno}")
+        raise AsmError(stmt.lineno, f"label {imm!r} not supported as {stmt.name} imm")
     if not min_val <= imm <= max_val:
-        raise ValueError(f"imm {imm} out of range [{min_val}, {max_val}] on line {stmt.lineno}")
+        raise AsmError(stmt.lineno, f"imm {imm} out of range [{min_val}, {max_val}] for {stmt.name}")
     if must_be_even and imm % 2:
-        raise ValueError(f"imm {imm} must be even for {stmt.name} on line {stmt.lineno}")
+        raise AsmError(stmt.lineno, f"imm {imm} must be even for {stmt.name}")
 
 
 def encode_i(stmt, entry):
@@ -164,10 +183,10 @@ ENCODERS = {
 def encode(stmt):
     entry = BY_NAME[stmt.name]
     if entry.fmt not in ENCODERS:
-        raise ValueError(f"no encoder for format {entry.fmt} ({stmt.name}) on line {stmt.lineno}")
+        raise AsmError(stmt.lineno, f"no encoder for format {entry.fmt} ({stmt.name})")
     for slot in FORMATS[entry.fmt]:
         if slot != "imm" and not 0 <= stmt.operands[slot] <= 31:
-            raise ValueError(f"{slot} {stmt.operands[slot]} out of range [0, 31] on line {stmt.lineno}")
+            raise AsmError(stmt.lineno, f"{slot} {stmt.operands[slot]} out of range [0, 31]")
     return ENCODERS[entry.fmt](stmt, entry)
 
 
@@ -180,7 +199,7 @@ def assemble(text, start=0):
             target = stmt.operands["imm"]
             if isinstance(target, str):
                 if target not in labels:
-                    raise ValueError(f"undefined label {target!r} on line {stmt.lineno}")
+                    raise AsmError(stmt.lineno, f"undefined label {target!r}")
                 target = labels[target]
             stmt = stmt._replace(operands=dict(stmt.operands, imm=target - stmt.addr))
         words.append(encode(stmt))
