@@ -204,3 +204,36 @@ def assemble(text, start=0):
             stmt = stmt._replace(operands=dict(stmt.operands, imm=target - stmt.addr))
         words.append(encode(stmt))
     return words
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    ap = argparse.ArgumentParser(description="assemble RV32I source to machine code")
+    ap.add_argument("source")
+    ap.add_argument("--listing", action="store_true",
+                    help="print address, word and source line instead of bare hex")
+    args = ap.parse_args()
+
+    try:
+        text = open(args.source).read()
+    except OSError as err:
+        sys.exit(f"{args.source}: error: {err.strerror}")
+
+    lines = text.splitlines()
+    try:
+        words = assemble(text)
+    except AsmError as err:
+        print(f"{args.source}:{err.lineno}: error: {err.msg}", file=sys.stderr)
+        if 1 <= err.lineno <= len(lines):
+            print(f"  {lines[err.lineno - 1].strip()}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.listing:
+        stmts, _ = parse(text)
+        for stmt, word in zip(stmts, words):
+            print(f"0x{stmt.addr:04x}  {word:08x}  {lines[stmt.lineno - 1].strip()}")
+    else:
+        for word in words:
+            print(f"{word:08x}")
