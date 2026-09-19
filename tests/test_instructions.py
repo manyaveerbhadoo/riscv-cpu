@@ -1,9 +1,11 @@
+from pathlib import Path
+
 import pytest
 
 from asm import assemble
 from emulator import Emulator
 
-PROGRAM = "programs/sum.s"
+PROGRAMS = Path(__file__).resolve().parents[1] / "programs"
 
 
 def machine(source, regs=None, mem=None, start=0):
@@ -202,8 +204,44 @@ def test_writes_to_x0_are_dropped(source):
 
 
 def test_sum_program_reaches_55():
-    e = Emulator()
-    e.load_program(assemble(open(PROGRAM).read()))
-    e.run()
-    assert e.state.read_reg(1) == 55
-    assert e.state.halted
+    e = machine((PROGRAMS / "sum.s").read_text())
+    before = e.state.dump()
+    e.run(max_steps=100)
+    assert e.state.halted, "sum.s did not halt within 100 steps"
+    assert e.state.dump() == expected(before, 32, regs={1: 55, 2: 11, 3: 11})
+
+
+def test_memory_program():
+    e = machine((PROGRAMS / "memory.s").read_text())
+    before = e.state.dump()
+    e.run(max_steps=100)
+    assert e.state.halted, "memory.s did not halt within 100 steps"
+    assert [e.state.mem.get(0x100 + k, 0) for k in range(4)] == [0xEF, 0, 0xAD, 0xDE]
+    assert e.state.dump() == expected(
+        before, 24, regs={1: 0x100, 2: 0xDEAD00EF, 3: 0xDEAD00EF},
+        mem={0x100: 0xDEAD00EF}
+    )
+
+
+def test_branch_program():
+    e = machine((PROGRAMS / "branches.s").read_text())
+    before = e.state.dump()
+    e.run(max_steps=100)
+    assert e.state.halted, "branches.s did not halt within 100 steps"
+    assert e.state.dump() == expected(before, 28, regs={1: 7, 2: 1})
+
+
+def test_call_program():
+    e = machine((PROGRAMS / "call.s").read_text())
+    before = e.state.dump()
+    e.run(max_steps=100)
+    assert e.state.halted, "call.s did not halt within 100 steps"
+    assert e.state.dump() == expected(before, 16, regs={1: 8, 10: 10, 11: 11})
+
+
+def test_constant_program():
+    e = machine((PROGRAMS / "constant.s").read_text())
+    before = e.state.dump()
+    e.run(max_steps=100)
+    assert e.state.halted, "constant.s did not halt within 100 steps"
+    assert e.state.dump() == expected(before, 12, regs={5: 0x12345ABC})
